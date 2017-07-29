@@ -9,11 +9,21 @@ def get_table_mimic(padj, table_name):
     path_mimicroot = ""
     return path_mimicroot + padj + "/" + "{0}/{1}-{0}.txt".format(pid, table_name)   
 
+
+class PhysioVar:
+    """A simple example class"""
+    def __init__(self, id, min, max, unit):
+        self.id = id
+        self.min = min
+        self.max = max
+
+v_resp = PhysioVar(618, 0, 250, 'bpm')    
+
 dfs = []
-for j in range (0, 2):
+for j in range (0, 10):
     # padj: leftmost 2 digits 
     padj = str(j).rjust(2, '0')
-    for i in range(1, 10):
+    for i in range(1, 2):
         try:
             # padj: rightmost 3 digits 
             padi = str(i).rjust(3, '0')
@@ -21,6 +31,13 @@ for j in range (0, 2):
             file_dpatients = padj + "/" + "{0}/D_PATIENTS-{0}.txt".format(pid)    
             #file_icustayev = "{0}/ICUSTAYEVENTS-{0}.txt".format(t)
             file_icustaydet = padj + "/" + "{0}/ICUSTAY_DETAIL-{0}.txt".format(pid)
+  
+    
+            TABLE_CHARTEV = pd.read_csv(get_table_mimic(padj, 'CHARTEVENTS'), header = 0, usecols=['SUBJECT_ID', 'ITEMID', 'ICUSTAY_ID', 'VALUE1NUM' ])
+           
+            TABLE_CHARTEV = TABLE_CHARTEV.query('ITEMID == {0} and VALUE1NUM >= {1} and  VALUE1NUM <= {2}'.format(v_resp.id, v_resp.min, v_resp.max ) )
+            print TABLE_CHARTEV.groupby('ICUSTAY_ID')['VALUE1NUM'].mean()
+            
             
             data_tmp = pd.read_csv(file_dpatients, header = 0, parse_dates=True, usecols=['SUBJECT_ID', 'HOSPITAL_EXPIRE_FLG'])
             #data_tmp_icustays = pd.read_csv(file_icustayev, header = 0, parse_dates=True, usecols=['SUBJECT_ID', 'ICUSTAY_ID','INTIME'])  
@@ -31,9 +48,20 @@ for j in range (0, 2):
             df['ICUSTAY_OUTTIME'] = df['ICUSTAY_OUTTIME'].apply(date_converter)
             try:
                 df['STAY'] = df.apply(lambda x: date_subtractor(x['ICUSTAY_OUTTIME'], x['ICUSTAY_INTIME']), axis = 1)
+                
+                #df['RESP'] = df.apply(lambda x: date_subtractor(x['ICUSTAY_OUTTIME'], x['ICUSTAY_INTIME']), axis = 1)
             except Exception, e2:
                 print e2
             data_merged = df.query('ICUSTAY_ADMIT_AGE>15 and STAY>0')
+            #data_merged = data_merged.merge(TABLE_CHARTEV,on=['ICUSTAY_ID'], how='inner').groupby(['ICUSTAY_ID'], as_index=False)['VALUE1NUM'].mean()
+            aggregated = TABLE_CHARTEV.groupby('ICUSTAY_ID').mean()['VALUE1NUM']
+            aggregated.name = 'RESP'
+            print "***********************$$$$"
+            print aggregated
+            print "***********************"
+            data_merged = data_merged.join(aggregated,on='ICUSTAY_ID')
+            
+            
             del df
             dfs.append(data_merged)
         except Exception, e:
@@ -46,8 +74,10 @@ del data['ICUSTAY_OUTTIME']
 del data['ICUSTAY_INTIME']
 print data
 print "Total data: {0}".format(data.shape[0])
+data = data.query('HOSPITAL_EXPIRE_FLG == \'N\'')
+print "Total data, after expire: {0}".format(data.shape[0])
 
-#df.to_csv('foo.csv')
+#data.to_csv('filtered1.csv')
 
 
 
